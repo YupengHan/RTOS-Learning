@@ -228,6 +228,26 @@ rt_scheduler_sethook(void(*hook)(struct rt_thread*from, struct rt_thread*to))
         1. 邮件
         1. 消息队列
         - 通过IPC，我们可以协调多线程（包括ISR）之间工作
-### 信号量
+#### 信号量
 - 
     - 线程 通过 信号量的
+### 信号量工作机制
+- 
+    - 线程之间同步的问题
+    - thread之间通过 获取 释放 信号量
+    - 达到 同步 或 互斥 的目的
+- 每个信号量对象有
+    1. 信号量值：
+        - 对应信号量对象数量（资源数）
+    1. 线程等待队列
+    ```C
+        struct rt_semaphore {
+            struct rt_ipc_object_parent;
+            rt_uint16_t value;
+        }
+
+        // 静态信号量
+        struct rt_semaphore static_sem；
+        // 动态信号量， 指向信号量的指针
+        rt_sem_t dynamic_sem； 
+    ```
