@@ -10,40 +10,42 @@
 
 1. 创建线程
     1. rt_thread_init
-    ``` C
-    rt_err_t rt_thread_init(struct rt_thread *thread, //线程控制块
-                            const char *name,
-                            void(*entry)(void* parameter), //线程代码
-                            void *parameter, // 0 for nothing
-                            void *stack_start,  //线程栈起始地址
-                            rt_uint32_t stack_size,
-                            rt_uint8_t priority,
-                            rt_uint32_t tick) //时间切片个数
-    ```
-    静态线程创建
-    - 事先定义好，线程控制块和栈空间，所以是静态的
-    - 使用环境：使用外部存储空间的时候
+        ``` C
+        rt_err_t rt_thread_init(struct rt_thread *thread, //线程控制块
+                                const char *name,
+                                void(*entry)(void* parameter), //线程代码
+                                void *parameter, // 0 for nothing
+                                void *stack_start,  //线程栈起始地址
+                                rt_uint32_t stack_size,
+                                rt_uint8_t priority,
+                                rt_uint32_t tick) //时间切片个数
+        ```
+        静态线程创建
+        - 事先定义好，线程控制块和栈空间，所以是静态的
+        - 使用环境：使用外部存储空间的时候
     1. rt_thread_create
-    ```C
-    rt_thread_t rt_thread_creat(const char *name,
-                            void(*entry)(void* parameter), //线程代码
-                            void *parameter, // 0 for nothing
-                            rt_uint32_t stack_size,
-                            rt_uint8_t priority,
-                            rt_uint32_t tick) //时间切片个数
-    ```
-    动态线程创建
-
-    - 不需要其实地址
-    - 不需要输入线程控制块， 线程控制块为返回值（自动分配的）
-    - 创建动态线程之后，还要调用
+        ```C
+        rt_thread_t rt_thread_creat(const char *name,
+                                void(*entry)(void* parameter), //线程代码
+                                void *parameter, // 0 for nothing
+                                rt_uint32_t stack_size,
+                                rt_uint8_t priority,
+                                rt_uint32_t tick) //时间切片个数
+        ```
+        动态线程创建
+        - 不需要其实地址
+        - 不需要输入线程控制块， 线程控制块为返回值（自动分配的）
+        - 创建动态线程之后，还要调用
+    
+    1. 将创建的线程加入线程就绪队列，执行调度
         ```C
         rt_err_t rt_thread_startup(rt_thread_t thread) //input是线程控制块的指针
         ```
-        将创建的线程加入线程就绪队列，执行调度
+    
 
 # Simple Led Project
-// 1.png  
+<!-- // 1.png   -->
+- <img src="https://raw.githubusercontent.com/YupengHan/RTOS-Learning/main/imgs/1.png" width = "600" height = "200" alt="图片名称" align=center />
 初始状态 A;  
 就绪状态 B;  
 运行状态 C;  
@@ -175,6 +177,7 @@ rt_scheduler_sethook(void(*hook)(struct rt_thread*from, struct rt_thread*to))
     把调度器锁住，不让其进行线程切换，保证当前运行的任务不被换出
     直到把调度器解锁（常用临界区保护方法）
     - 禁止调度
+        1. 把调度区锁住，不再进行线程切换
         ```C        
         void thread_entry(void parameter) {
             while(1) {
@@ -251,3 +254,240 @@ rt_scheduler_sethook(void(*hook)(struct rt_thread*from, struct rt_thread*to))
         // 动态信号量， 指向信号量的指针
         rt_sem_t dynamic_sem； 
     ```
+### 信号量的操作
+- 初始化和脱离
+    ```C
+    // 现在代码中定义出来 
+    struct rt_semaphore static_sem;
+    
+    
+    
+    /*针对静态信号量*/
+    rt_err_t rt_sem_init(rt_sem_t sem,   // 信号量的指针，将静态信号量的地址传入
+                        const char*name, //名称
+                        rt_uint32_t value, //初始值，几个改信号实例数目
+                        rt_uint8_t flag)  // 信号量的标志 
+
+    /*
+    FLAG types
+        RT_IPC_FLAG_FIFO //先进先出
+        RT_IPC_FLAG_PRIO //按照优先级的方式排队等候
+    flag 的作用
+        当信号不好用的时候，等待进程的等待方式
+    */
+    re_err_t rt_sem_detach(rt_sem_t sem)
+    //从管理器中移除
+    ```
+- 创建与删除
+    ```C
+    /*
+    因为create函数需要申请信号量的内存空间，所以有成功和失败两种情况
+    对于返回值，需要判断是否等于null！
+    如果返回值为0，申请失败
+    */
+    rt_sem_t rt_sem_create(const char* name,
+                            rt_uint32_t value,
+                            rt_uint8_t flag)
+    rt_sem_t rt_sem_delete(rt_sem_t sem)
+    //自动释放信号实例内存资源
+    ```
+
+- 获取信号量
+    ```C
+    /*
+        因为这个函数会使得的thread被挂起
+        我们只在thread中调用
+        不能在中断 ISR 中调用
+    */
+
+    rt_err_t rt_sem_take(rt_sem_t sem, rt_int32_t time) {};
+    /*
+    return value > 0  means signal is available
+    return value == 0, means cannnot use signal, 申请信号量的thread申请失败
+    如果不可用，该thread会根据tick参数进行等待（如果为0，立刻返回）
+    tick是根据嘀嗒时钟进行等待的
+    如果time<0，RT_WAITING_FOREVER,永远等待
+    */
+    rt_err_t rt_sem_trytake(rt_sem_t sem)
+    /*
+        如果没等到，返回一个rt_etimeout
+    */
+    ```
+- 释放
+    ```C
+    /*
+    可以在thread 和 ips 中调用，因为不会导致thread挂起
+    */
+    rt_err_t rt_sem_release(rt_sem_t sem)
+    //释放一个
+
+    ```
+#### RT_EOK
+    #define 	RT_EOK   0 //There is no error
+    The error code is defined to identify which kind of error occurs. When some bad things happen, the current thread's errno will be set. see _rt_errno
+    
+    #define RT_ERROR   1 // A generic error happens
+
+# 生产者消费者问题
+- 
+    -
+    大小为n的缓冲区  
+    生产者 写 缓冲间  
+    消费者 取 缓冲区  
+
+    核心：
+        1. 生产者在 缓冲区 满 的时候 不写
+        1. 消费者 在 缓冲区 空 的时候 不读
+- 互斥关系
+    - 缓冲区， 一时刻 一个thread
+    - 0/1 信号量
+- 同步关系
+    - 生产后才能消费， 消费后才能生产
+    - 缓冲区满信号量（init 0） 
+    - <img src="https://raw.githubusercontent.com/YupengHan/RTOS-Learning/main/imgs/2.PNG" width = "480" height = "360" alt="图片名称" align=center />
+
+
+<!-- ![avatar](https://raw.githubusercontent.com/YupengHan/RTOS-Learning/main/imgs/2.PNG = 100x100
+) -->
+
+- Yupeng Notes
+    - 这个rt_semaphore 在 rt_sem_init 的时候没有自动的分配内存
+    - rt_uint32_t value 这个值仅代表初始值的大小（意味着 后面的值可以比这个大，没有所谓最大限制的概念）
+
+    ```C++
+    rt_err_t rt_sem_init(rt_sem_t sem,   // 信号量的指针，将静态信号量的地址传入
+                        const char*name, //名称
+                        rt_uint32_t value, //初始值，几个改信号实例数目
+                        rt_uint8_t flag)  // 信号量的标志
+    
+    
+    struct rt_semaphore
+    {
+        struct rt_ipc_object parent;                        /**< inherit from ipc_object */
+
+        rt_uint16_t          value;                         /**< value of semaphore. */
+    };
+    typedef struct rt_semaphore *rt_sem_t;
+
+    struct rt_ipc_object
+    {
+        struct rt_object parent;                            /**< inherit from rt_object */
+
+        rt_list_t        suspend_thread;                    /**< threads pended on this resource 是个双向链表*/
+    };
+
+    struct rt_list_node
+    {
+        struct rt_list_node *next;                          /**< point to next node. */
+        struct rt_list_node *prev;                          /**< point to prev node. */
+    };
+    typedef struct rt_list_node rt_list_t;   
+
+    ```
+
+    ```C++
+    // about the rt_sem_init
+    rt_err_t rt_sem_init(rt_sem_t    sem,
+                     const char *name,
+                     rt_uint32_t value,
+                     rt_uint8_t  flag)
+    {
+        RT_ASSERT(sem != RT_NULL);
+
+        /* init object */
+        rt_object_init(&(sem->parent.parent), RT_Object_Class_Semaphore, name);
+
+        /* init ipc object */
+        rt_ipc_object_init(&(sem->parent)); //初始化了一个double link list（用来存储对象）
+
+        /* set init value */
+        sem->value = value;
+
+        /* set parent */
+        sem->parent.parent.flag = flag;
+
+        return RT_EOK;
+    }
+    ```
+
+# 互斥量
+#### semlock 0-1 量?
+- 互斥锁 特殊的二值信号量
+- 两种状态 locked unlocked
+```C++
+    struct rt_mutex
+    {
+        struct rt_ipc_object parent;                        /**< inherit from ipc_object */
+
+        rt_uint16_t          value;                   //只有两种状态      /**< value of mutex */
+
+        rt_uint8_t           original_priority;      //上次拥有这个互斥量的priority       /**< priority of last thread hold the mutex */
+        rt_uint8_t           hold;                  //？？？线程持有互斥量的次数？         /**< numbers of thread hold the mutex */
+
+        struct rt_thread    *owner;                     //当前持有这个mutex的线程控制块    /**< current owner of mutex */
+    };
+
+    struct_rt_mutex static_mutex;
+    rt_mutex_t dynamic_mutex;
+```
+
+- <img src="https://raw.githubusercontent.com/YupengHan/RTOS-Learning/main/imgs/3.png" width = "800" height = "444" alt="图片名称" align=center />
+```C++
+    rt_err_t rt_mutex_detach //从内核管理中剔除
+    rt_err_t rt_mutex_take //加锁，如果被使用了，目前线程就suspend
+    /*
+    和普通的信号量不同
+    互斥量mutex 支持重复的take，
+    Eg thread 1 using mutex
+        thread2 take (suspend, hold)
+        thread3 take (suspend, 加入hold的队列)
+    */
+    rt_err_t rt_mutex_release //加锁，只有这个thread take 了 当前mutex，才能使用release
+    // take release 都只能在thread中操作，不可以在中断之中操作！
+    // 信号量的release可以在中断中使用， mutex不行
+```
+
+# 线程的优先级翻转[Not Started]
+# 事件集
+-
+    - 特定时间发生唤醒thread
+    - 任意单个事件唤醒thread
+    - 多个时间同时发生才能唤醒thread
+- 
+    - 信号量：1对1的线程同步
+    - 事件集合：1对多 多对1 多对多 的同步
+    - rt-thread事件集合 32bit uint，每个bit代表一个事件，线程通过 and or 与一个或多个时间链接
+        - or 线程与任何一个事件发生同步 独立型同步
+        - and 线程与若干事件都发生同步，需要若干事件全部发生 关联型同步
+    
+
+- 
+    -
+    ```C
+    // 现在代码中定义出来 
+    struct  rt_event {
+        struct rt_ipc_object_parent;
+        rt_uint32_t set;
+    };
+    typedef struct rt_event *rt_event_t;
+    
+    ```
+
+
+# RT-thread 内核学习
+### 内核基础 - Intro
+- <img src="https://raw.githubusercontent.com/YupengHan/RTOS-Learning/main/imgs/4.png" width = "600" height = "300" alt="图片名称" align=center />
+- 线程调度
+    - 线程调度算法是基于优先级的全抢占式多线程调度算法，即在系统中除了中断处理函数、调度器上锁部分的代码和禁止中断的代码是不可抢占的之外，系统的其他部分都是可以抢占的
+- 
+
+
+
+# Next time start with BILIBILI videos
+
+
+
+
+
+    
+
